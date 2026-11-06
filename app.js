@@ -1,5 +1,5 @@
 'use strict';
-/* L-3903A1/A2 CONCEPT · V2.0 · MODELO EXCLUSIVAMENTE DIDÁTICO
+/* L-3903A1/A2 CONCEPT · V2.6 · MODELO EXCLUSIVAMENTE DIDÁTICO
    O modelo não representa sintonia, dinâmica ou lógica funcional validada da U-39.
    Pressões da captura são estáticas; a simulação calcula um ΔP matematicamente coerente. */
 const $=id=>document.getElementById(id);
@@ -8,9 +8,30 @@ const fmt=(v,n=1)=>Number(v).toFixed(n).replace('.',',');
 const esc=str=>String(str).replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
 let showToastHandle;
 function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(showToastHandle);showToastHandle=setTimeout(()=>el.classList.remove('show'),3800);}
-function goPage(page){const tab=document.querySelector(`.tab[data-page="${page}"]`),section=$('page-'+page);if(!tab||!section)return;document.querySelectorAll('.tab').forEach(t=>{const active=t===tab;t.classList.toggle('active',active);t.setAttribute('aria-selected',active?'true':'false')});document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p===section));window.scrollTo({top:Math.max(0,document.querySelector('.tabs').offsetTop-5),behavior:'smooth'});if(page==='simulator')setTimeout(renderCharts,100);}
+function goPage(page){const tab=document.querySelector(`.tab[data-page="${page}"]`),section=$('page-'+page);if(!tab||!section)return;document.querySelectorAll('.tab').forEach(t=>{const active=t===tab;t.classList.toggle('active',active);t.setAttribute('aria-selected',active?'true':'false')});document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p===section));window.scrollTo({top:Math.max(0,document.querySelector('.tabs').offsetTop-5),behavior:'smooth'});if(page==='simulator')setTimeout(()=>{renderCharts();updatePlantPan();},100);}
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>goPage(t.dataset.page)));
 document.querySelectorAll('[data-go]').forEach(t=>t.addEventListener('click',()=>goPage(t.dataset.go)));
+// V2.1 — navegação da animação: arraste horizontalmente, use setas ou enquadre tudo.
+const plantScroll=$('plantScroll'), plantPanLeft=$('plantPanLeft'), plantPanRight=$('plantPanRight'), plantFit=$('plantFit');
+function updatePlantPan(){
+  const fitted=plantScroll.classList.contains('is-fit');
+  const max=Math.max(0,plantScroll.scrollWidth-plantScroll.clientWidth);
+  plantPanLeft.disabled=fitted||max<3||plantScroll.scrollLeft<=3;
+  plantPanRight.disabled=fitted||max<3||plantScroll.scrollLeft>=max-3;
+  plantFit.setAttribute('aria-pressed',String(fitted));
+  plantFit.textContent=fitted?'Explorar ↔':'Ver inteiro';
+  $('plantViewportStatus').textContent=fitted?'Desenho completo enquadrado (reduzido)':max<3?'Desenho inteiro visível':`Posição: ${Math.round(100*plantScroll.scrollLeft/max)}% do trajeto horizontal`;
+}
+plantPanLeft.addEventListener('click',()=>plantScroll.scrollBy({left:-Math.max(240,plantScroll.clientWidth*.75),behavior:'smooth'}));
+plantPanRight.addEventListener('click',()=>plantScroll.scrollBy({left:Math.max(240,plantScroll.clientWidth*.75),behavior:'smooth'}));
+plantFit.addEventListener('click',()=>{
+  plantScroll.classList.toggle('is-fit');plantScroll.scrollLeft=0;
+  requestAnimationFrame(updatePlantPan);
+});
+plantScroll.addEventListener('scroll',updatePlantPan,{passive:true});
+window.addEventListener('resize',updatePlantPan);
+requestAnimationFrame(updatePlantPan);
+
 const topicData={
  topology:{title:'Fluxo de sinais de controle',body:`<p>Há três níveis funcionais: <b>medir</b> o que o processo está fazendo, <b>decidir</b> a maior solicitação de abertura e <b>atuar/confirmar</b> o posicionamento final.</p><ul><li>PT-029B e PT-029A entram na diferença PDX-029A.</li><li>PDIC-029 calcula a demanda para manter ΔP.</li><li>PT-028 e PIC-028 calculam a demanda relativa à pressão do regenerador.</li><li>PDY-029A seleciona a maior MV.</li><li>ZIC-009 / PDY-029B / HS-39014 intervêm no caminho posterior, cujo algoritmo exato não está documentado na tela.</li><li>PDY-029K/N, PY e as realimentações completam cada ramal.</li></ul><p>Uma falha em qualquer camada pode gerar resposta diferente da desejada; a posição de fato deve ser confrontada com o comando.</p>`},
  override:{title:'Por que selecionar o maior comando?',body:`<p>O comportamento físico esperado das slides é: <b>mais abertura → mais descarga → menor pressão do regenerador</b>, mantendo as demais variáveis constantes.</p><p>Se o diferencial estiver baixo, o PDIC tende a pedir fechamento. Se a pressão do regenerador estiver alta, o PIC tende a pedir abertura. São duas solicitações potencialmente conflitantes.</p><p>O <code>max(MV_PDIC, MV_PIC)</code> impõe o maior sinal, favorecendo maior descarga quando necessário. Assim, a limitação de pressão pode prevalecer sobre a busca do diferencial.</p><p>Exemplo: PDIC = 39%, PIC = 72% → saída do seletor = 72%. Não são somadas as duas saídas.</p>`},
@@ -18,11 +39,12 @@ const topicData={
  purpose:{title:'Gases de combustão versus circulação de catalisador',body:`<p>As L-3903A1/A2 estão associadas à descarga dos gases de combustão do regenerador no caminho da câmara de orifícios F-3902. Não conduzem a circulação normal do catalisador entre reator e regenerador.</p><p>Alterar a pressão do D-3904 modifica o diferencial em relação ao D-3902 e pode afetar margens hidráulicas do conversor. Entretanto, <b>o diferencial D-3904/D-3902 isolado não permite concluir que uma slide de catalisador esteja em reversão</b>; são necessários os balanços de pressões dos respectivos trechos.</p>`},
  measurement:{title:'Checagem do diferencial indicado',body:`<p>Na tela, PT-029B = 2,47 e PT-029A = 2,20. A subtração é 0,27, mas o PDX indica 0,25.</p><p>Essa diferença não se justifica apenas por arredondar individualmente os números com duas casas decimais. Verificar escalonamentos, identificação dos transmissores, filtros, sincronismo das leituras, históricos e eventuais offsets é mais adequado que presumir a causa.</p><p>Outra leitura PT-028 = 2,47 aparece para o PIC. Embora o número mostrado coincida, o instrumento é identificado separadamente.</p>`},
  pic:{title:'PIC-028 como controle de sobreposição',body:`<p>O procedimento de transferência PE.REF.OPE.CCF.063 descreve o PIC-39028 em automático com referência em torno de 250 gramas acima da pressão corrente, em certas condições de transferência. A estratégia permite que a saída do PIC não domine o seletor durante a regulação usual do diferencial.</p><p>Se o regenerador elevar sua pressão até a região de atuação do PIC, sua MV pode aumentar e superar a do PDIC, solicitando maior abertura das slides.</p><p>Isso é controle de override/sobreposição. Não equivale à comprovação de intertravamento de segurança ou de limite mecânico do equipamento.</p>`},
- uncertain:{title:'Partes da malha que exigem validação documental',body:`<p>A tela deixa claros o seletor de máxima PDY-029A e vários valores, mas não apresenta uma lógica completa de HS-39014, PDY-029B, ZIC-009/ZIC-029, ganhos, filtros, distribuição por ramal e permissivos.</p><p>Por isso, no laboratório a chave HS-39014 apenas troca os ajustes ilustrativos entre A1 e A2; os três caminhos de distribuição são <b>modos explicitamente hipotéticos</b>. O modo padrão recebe a maior MV e acrescenta offsets ilustrativos +0,4 e +2,4 p.p. Os números servem para aproximar a fotografia da tela, mas não afirmam que esses offsets existam na planta.</p><p>Para engenharia de validação, confrontar folhas lógicas e configuração real do Yokogawa Centum VP.</p>`},
+ uncertain:{title:'Partes da malha que exigem validação documental',body:`<p>A tela deixa claros o seletor de máxima PDY-029A e vários valores, mas não apresenta uma lógica completa de HS-39014, PDY-029B, ZIC-009/ZIC-029, ganhos, filtros, distribuição por ramal e permissivos.</p><p>A função da HS-39014 foi esclarecida pelo operador: selecionar A1 ou A2 para receber o caminho do PDIC-029. O comando percorre o seletor de máxima PDY-029A, preservando a possibilidade de override do PIC-028. A slide não selecionada permanece sob o ZIC-009. Este somente libera novo comando quando <b>|PV−SP| ≥ 3 pontos percentuais</b>, conforme informação operacional recebida. A PV do ZIC-009 é a saída do PDY-029A, confirmada pelo operador. Permanecem não validados os ganhos e a lei interna da MV do ZIC.</p><p>Para engenharia de validação, confrontar folhas lógicas e configuração real do Yokogawa Centum VP.</p>`},
  position:{title:'Comando não é posição, posição não é vazão',body:`<p>Uma MV ou comando de 48% corresponde a uma referência. A realimentação ZI mostra onde o conjunto foi medido. Na captura, A1 tem 48% comandado e 47,9% real; A2 tem 50% comandado e 50,3% real.</p><p>O erro pequeno sugere acompanhamento da referência naquela fotografia, não prova ausência de desgaste ou falhas intermitentes.</p><p>A abertura percentual também não garante capacidade de fluxo equivalente entre dois caminhos. Curva característica, pressão disponível e condição dos internos precisam ser consideradas.</p>`},
  alarms:{title:'Desvio de posição e supressão de alarme',body:`<p>O critério ilustrativo considera <code>|comando − posição|</code>. Uma diferença persistente pode indicar travamento, resposta lenta, problema do I/P, atuador ou medição de posição.</p><p>Na tela original aparece referência de ±5 e blocos ZDSHL e ZDAHL. Não há documentação suficiente para confirmar sua temporização, modo de supressão, polaridade e eventuais ações automáticas.</p><p>O simulador sinaliza atenção quando a magnitude excede 5 pontos percentuais, sem reproduzir uma lógica real de alarme ou intertravamento.</p>`},
- deadband:{title:'O que a dead band modifica?',body:`<p>Banda morta significa deixar de reagir a pequenas diferenças para evitar movimentos incessantes. Por exemplo, com comando 48%, posição 47,7% e banda de ±0,5 ponto percentual, o algoritmo pode manter a posição sem atuar.</p><p>Uma banda morta excessiva, por outro lado, piora a precisão do posicionamento. O melhor valor depende do equipamento e da filosofia de controle.</p><p>O simulador permite alterar uma banda morta didática de 0 a 3 pontos percentuais. <b>Não é a parametrização confirmada da U-39.</b></p>`},
- commands:{title:'Como ler a cascata de comandos',body:`<p>A coluna PDIC mostra a saída destinada a manter ΔP. A coluna PIC mostra a saída de proteção por pressão alta. A coluna PDY-029A mostra qual delas é maior no instante.</p><p>Em seguida, a referência escolhida pelo modo de distribuição <b>hipotético</b> gera comandos individuais. Cada posição real se aproxima do respectivo comando com tempo de resposta.</p><p>Os indicadores de desvio mostram se a válvula acompanha. Um controle pode ter MV correta, mas o processo continuar instável caso a válvula esteja travada ou haja contrapressão elevada.</p>`},
+ deadband:{title:'O que a dead band modifica?',body:`<p>Banda morta significa deixar de reagir a pequenas diferenças para evitar movimentos incessantes. Por exemplo, com comando 48%, posição 47,7% e banda de ±0,5 ponto percentual, o algoritmo pode manter a posição sem atuar.</p><p>Uma banda morta excessiva, por outro lado, piora a precisão do posicionamento. O melhor valor depende do equipamento e da filosofia de controle.</p><p>Na malha informada, o ZIC-009 possui banda morta de <b>3 pontos percentuais</b> entre PV do PDY-029A e SP digitado pelo operador. Fora da faixa, o ZIC atua na slide não selecionada. O modelo usa histerese de retorno de 0,4 p.p. (desliga com |erro| ≤ 2,6), exclusivamente para evitar oscilações didáticas. A histerese real não foi confirmada.</p>`},
+ balance:{title:'Por que uma slide abre enquanto outra fecha?',body:`<p>Se a HS-39014 seleciona A1, ela recebe o comando de PDY-029A; A2 fica sob o ZIC-009. A PV do ZIC vem de PDY-029A e o SP é definido pelo operador.</p><p><b>Exemplo condicional:</b> SP do ZIC sobe de 48% para 52% e PV continua 47,6%. O desvio de −4,4 p.p. excede a banda de 3. Com a ação didática adotada, o ZIC inicia o fechamento da A2. A descarga cai, a pressão do D-3904 tende a subir, o ΔP tende a crescer e o PDIC reage solicitando abertura da A1 para recuperar a referência diferencial.</p><p>É uma compensação <b>indireta pelo processo</b>, não um comando direto do SP do ZIC para a slide selecionada. Se o ΔP começar abaixo do SP, a A1 pode inicialmente fechar e só abrir após o aumento de pressão. O tempo e o sentido exatos dependem da configuração real dos controladores.</p>`},
+ commands:{title:'Como ler a cascata de comandos',body:`<p>A coluna PDIC mostra a saída destinada a manter ΔP. A coluna PIC mostra a saída de proteção por pressão alta. A coluna PDY-029A mostra qual delas é maior no instante.</p><p>A HS-39014 escolhe qual slide recebe a referência selecionada pelo PDY-029A. A outra slide fica sob ZIC-009, que só libera nova referência quando |PV−SP| alcançar 3 p.p. A PV do ZIC é a MV selecionada pelo PDY-029A (máximo PDIC/PIC), não a posição real da slide. Cada posição real se aproxima do respectivo comando com tempo de resposta.</p><p>Os indicadores de desvio mostram se a válvula acompanha. Um controle pode ter MV correta, mas o processo continuar instável caso a válvula esteja travada ou haja contrapressão elevada.</p>`},
  disturb:{title:'Distúrbios simulados no balanço de gases',body:`<ul><li><b>Geração de gases:</b> maior produção que saída → pressão tende a subir.</li><li><b>P(D-3902):</b> aumenta ou diminui o ΔP medido, sem exigir mudança imediata de P(D-3904).</li><li><b>Contrapressão a jusante:</b> reduz a capacidade de fluxo das slides quando cresce.</li><li><b>SP ΔP:</b> modifica o alvo do controlador diferencial.</li><li><b>SP PIC:</b> modifica o início pretendido da limitação por pressão.</li></ul><p>O modelo simplifica interações físicas para torná-las visualmente compreensíveis.</p>`},
  scenariopresets:{title:'Sequência de prática recomendada',body:`<p>1. Reinicie o laboratório e acompanhe como o PDIC tenta corrigir ΔP inicialmente abaixo do SP.</p><p>2. Aplique aumento de geração de gases, observe P(D-3904) e a saída do PDIC.</p><p>3. Ative Override PIC, observe a troca de controlador selecionado.</p><p>4. Trave A1 e observe como o desvio cresce mesmo que o comando continue mudando.</p><p>5. Acrescente erro do PT-029B para notar discrepância entre variável real e variável que o controlador interpreta.</p><p>6. Retorne à condição de referência e compare a recuperação no histórico.</p>`}
 };
@@ -40,17 +62,90 @@ $('installBtn').addEventListener('click',async()=>{if(pendingInstall){const even
 if('serviceWorker' in navigator && location.protocol.startsWith('http'))window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 
 // ===== SIMULAÇÃO DIDÁTICA =====
-function initialState(){return{t:0,preg:2.47,psep:2.2,psepTarget:2.2,back:1.2,load:49.1,dpSp:.30,pregSp:2.75, pdicMv:47.6,picMv:10,pdicPrev:.27,picPrev:2.47,pdicMode:'auto',picMode:'auto',pdicManual:47.6,picManual:10,zicMv:50,path:'max',hs:'A1',biasA1:.4,biasA2:2.4,deadBand:0,alarmDelay:5,alarmTimerA1:0,alarmTimerA2:0,alarmActiveA1:false,alarmActiveA2:false,stableSeconds:0,lastWinner:"PDIC",events:[],mission:"recovery",missionStart:0,manualA1:48,manualA2:50,a1:47.9,a2:50.3,targetA1:48,targetA2:50,jamA1:false,jamA2:false,slow:false,sensorBias:0,speed:1, flow:49.1,winner:'PDIC',max:47.6,base:47.6,paused:false,history:[],sampleClock:0,manualTouched:false};}
+function initialState(){return{t:0,preg:2.47,psep:2.2,psepTarget:2.2,back:1.2,load:49.1,dpSp:.30,pregSp:2.75, pdicMv:47.6,picMv:10,pdicPrev:.27,pdicPvFilt:.27,picPrev:2.47,pdicMode:'auto',picMode:'auto',pdicManual:47.6,picManual:10,zicMv:50,zicSp:48,zicMode:'sp',zicDirectMv:50,zicPv:47.6,zicError:-.4,zicActive:false,zicWasActive:false,zicHeldA1:47.9,zicHeldA2:50.3,path:'max',hs:'A1',sourceA1:'PDY-029A',sourceA2:'ZIC-009 · em espera',alarmDelay:5,alarmTimerA1:0,alarmTimerA2:0,alarmActiveA1:false,alarmActiveA2:false,stableSeconds:0,lastWinner:"PDIC",events:[],mission:"recovery",missionStart:0,manualA1:48,manualA2:50,a1:47.9,a2:50.3,targetA1:48,targetA2:50,jamA1:false,jamA2:false,slow:false,sensorBias:0,speed:1, flow:49.1,winner:'PDIC',max:47.6,base:47.6,paused:false,history:[],sampleClock:0,manualTouched:false};}
 let s=initialState();
-const inputs=['load','psepTarget','back','dpSp','pregSp','pdicManual','picManual','zicMv','biasA1','biasA2','manualA1','manualA2','sensorBias','deadBand','alarmDelay'];
+const inputs=['load','psepTarget','back','dpSp','pregSp','pdicManual','picManual','manualA1','manualA2','sensorBias','alarmDelay'];
 const dpMeasured=()=>s.preg+s.sensorBias-s.psep;
 const selectedMode=()=>s.pdicMv>=s.picMv?'PDIC':'PIC';
 const clampPercent=v=>clamp(v,0,100);
-const slidersDigits={load:1,psepTarget:2,back:2,dpSp:2,pregSp:2,pdicManual:1,picManual:1,zicMv:1,biasA1:1,biasA2:1,manualA1:1,manualA2:1,sensorBias:2,deadBand:1,alarmDelay:0};
-function outputText(key){const value=fmt(s[key],slidersDigits[key]);const unit=['pdicManual','picManual','zicMv','manualA1','manualA2'].includes(key)?'%':['biasA1','biasA2','deadBand'].includes(key)?' p.p.':key==='alarmDelay'?' s':'';return ((key==='biasA1'||key==='biasA2')&&s[key]>0?'+':'')+value+unit;}
-function updateControls(){inputs.forEach(k=>{const el=$(k);if(!el)return;el.value=s[k];const out=$('out-'+k);if(out)out.textContent=outputText(k)});$('pdicMode').value=s.pdicMode;$('picMode').value=s.picMode;$('signalPath').value=s.path;$('hsSelector').value=s.hs;$('jamA1').checked=s.jamA1;$('jamA2').checked=s.jamA2;$('slow').checked=s.slow;$('speed').value=s.speed;$('pdicManualWrap').classList.toggle('is-hidden',s.pdicMode!=='manual');$('picManualWrap').classList.toggle('is-hidden',s.picMode!=='manual');$('manualValves').classList.toggle('is-hidden',s.path!=='individual');}
+const slidersDigits={load:1,psepTarget:2,back:2,dpSp:2,pregSp:2,pdicManual:1,picManual:1,manualA1:1,manualA2:1,sensorBias:2,alarmDelay:0};
+function outputText(key){const value=fmt(s[key],slidersDigits[key]);const unit=['pdicManual','picManual','manualA1','manualA2'].includes(key)?'%':key==='alarmDelay'?' s':'';return value+unit;}
+function updateControls(){
+ inputs.forEach(k=>{const el=$(k);if(!el)return;el.value=s[k];const out=$('out-'+k);if(out)out.textContent=outputText(k)});
+ $('pdicMode').value=s.pdicMode;$('picMode').value=s.picMode;$('signalPath').value=s.path;$('hsSelector').value=s.hs;
+ $('zicSpInput').value=fmt(s.zicSp,1);$('zicMvInput').value=fmt(s.zicDirectMv,1);updateZicFaceMode();
+ $('zicWrap').classList.toggle('is-hidden',s.path==='individual');$('hsSelector').disabled=s.path==='individual';
+ $('jamA1').checked=s.jamA1;$('jamA2').checked=s.jamA2;$('slow').checked=s.slow;$('speed').value=s.speed;
+ $('pdicManualWrap').classList.toggle('is-hidden',s.pdicMode!=='manual');$('picManualWrap').classList.toggle('is-hidden',s.picMode!=='manual');$('manualValves').classList.toggle('is-hidden',s.path!=='individual');
+}
 inputs.forEach(k=>$(k).addEventListener('input',e=>{s[k]=parseFloat(e.target.value);if(k==='pdicManual'&&s.pdicMode==='manual')s.pdicMv=s.pdicManual;if(k==='picManual'&&s.picMode==='manual')s.picMv=s.picManual;const out=$('out-'+k);if(out)out.textContent=outputText(k);s.manualTouched=true}));
-$('pdicMode').addEventListener('change',e=>{s.pdicMode=e.target.value;s.pdicManual=s.pdicMv;s.pdicPrev=dpMeasured();recordEvent('mode','PDIC-029 em '+s.pdicMode.toUpperCase(),'Transição de modo didática.');updateControls()});$('picMode').addEventListener('change',e=>{s.picMode=e.target.value;s.picManual=s.picMv;s.picPrev=s.preg;recordEvent('mode','PIC-028 em '+s.picMode.toUpperCase(),'Referência independente do D-3904.');updateControls()});$('signalPath').addEventListener('change',e=>{s.path=e.target.value;updateControls()});$('hsSelector').addEventListener('change',e=>{s.hs=e.target.value;toast('HS-39014: troca didática dos ajustes, sem representar a lógica real.');});
+$('pdicMode').addEventListener('change',e=>{s.pdicMode=e.target.value;s.pdicManual=s.pdicMv;s.pdicPrev=dpMeasured();s.pdicPvFilt=s.pdicPrev;recordEvent('mode','PDIC-029 em '+s.pdicMode.toUpperCase(),'Transição de modo didática.');updateControls()});$('picMode').addEventListener('change',e=>{s.picMode=e.target.value;s.picManual=s.picMv;s.picPrev=s.preg;recordEvent('mode','PIC-028 em '+s.picMode.toUpperCase(),'Referência independente do D-3904.');updateControls()});$('signalPath').addEventListener('change',e=>{s.path=e.target.value;updateControls()});$('hsSelector').addEventListener('change',e=>{const previous=s.hs;s.hs=e.target.value;s.zicHeldA1=s.a1;s.zicHeldA2=s.a2;s.zicWasActive=s.zicActive;currentOutput();recordEvent('switch','HS-39014: comando PDIC/PIC direcionado à L-3903'+s.hs,'Antes: L-3903'+previous+'. A outra slide fica sob ZIC-009, com limiar de 3 p.p.; até nova atuação, retém a referência atual.');toast('HS-39014 em '+s.hs+': PDIC → L-3903'+s.hs+'; outra slide → ZIC-009 (dead band 3 p.p.).');render();});
+// Faceplate: operador digita o SP do ZIC-009; a PV é sempre a saída real de PDY-029A.
+$('zicSpForm').addEventListener('submit',e=>{
+ e.preventDefault();
+ const raw=$('zicSpInput').value.trim().replace(',', '.');
+ const value=Number(raw);
+ if(!raw || !Number.isFinite(value) || value<0 || value>100){toast('SP inválido: informe percentual entre 0 e 100.');$('zicSpInput').focus();return;}
+ const old=s.zicSp;s.zicSp=value;
+ currentOutput();recordEvent('mode','Faceplate ZIC-009: SP alterado',`Operador ${fmt(old,1)}% → ${fmt(s.zicSp,1)}%; PV atual do PDY-029A ${fmt(s.zicPv,1)}%.`);
+ updateControls();render();toast('SP do ZIC-009 aplicado: '+fmt(s.zicSp,1)+'%.');
+});
+// V2.6 · Dois modos didáticos de atuação do ZIC-009. A saída por MV é
+// comando direto do operador (sem malha fechada ZIC SP/PV), apesar do nome de menu.
+function updateZicFaceMode(){
+ const isSp=s.zicMode==='sp';
+ $('zicModeSp').classList.toggle('is-selected',isSp);$('zicModeMv').classList.toggle('is-selected',!isSp);
+ $('zicModeSp').setAttribute('aria-pressed',String(isSp));$('zicModeMv').setAttribute('aria-pressed',String(!isSp));
+ $('zicSpPanel').classList.toggle('is-hidden',!isSp);$('zicMvPanel').classList.toggle('is-hidden',isSp);
+ $('zicFaceStatus').textContent=isSp?'AUTO · SP':'MV DIRETA';
+ $('zicThresholdTests').classList.toggle('is-hidden',!isSp);
+ $('zicCompensationDemo').disabled=!isSp;
+ $('zicModeNote').innerHTML=isSp?'<b>AUTO · SP:</b> a MV é corrigida lentamente somente ao atingir a banda morta de 3 p.p.; PV = PDY-029A. Ganhos e histerese são didáticos.':'<b>MV DIRETA:</b> o operador define a saída para a slide auxiliar. SP e PV são exibidos para comparação, porém não fecham a malha do ZIC. Este modo não equivale a AUTO por SP no sentido usual de instrumentação.';
+}
+function setZicMode(mode){
+ if(mode!== 'sp' && mode!=='mv'||s.zicMode===mode)return;
+ const old=s.zicMode;
+ if(mode==='mv'){
+  // Entrada sem salto: pega a saída atual do ZIC como a nova referência direta.
+  s.zicDirectMv=s.zicMv;
+ }else{
+  // Saída sem salto: AUTO parte da MV atual e aguarda banda morta para correção.
+  s.zicWasActive=false;
+ }
+ s.zicMode=mode;currentOutput();updateControls();render();
+ recordEvent('mode','ZIC-009: '+(mode==='sp'?'AUTO por SP':'MV direta pelo operador'),`Antes ${old==='sp'?'AUTO SP':'MV direta'}; MV atual ${fmt(s.zicMv,1)}%; HS seleciona ${s.hs}.`);
+ toast(mode==='sp'?'ZIC-009 AUTO SP: correção somente pela banda morta.':'ZIC-009 MV direta: digite a nova saída; SP não atua neste modo.');
+}
+$('zicModeSp').addEventListener('click',()=>setZicMode('sp'));
+$('zicModeMv').addEventListener('click',()=>setZicMode('mv'));
+$('zicMvForm').addEventListener('submit',e=>{
+ e.preventDefault();
+ const raw=$('zicMvInput').value.trim().replace(',','.');const value=Number(raw);
+ if(!raw||!Number.isFinite(value)||value<0||value>100){toast('MV inválida: informe percentual entre 0 e 100.');$('zicMvInput').focus();return;}
+ if(s.zicMode!=='mv'){toast('Selecione MV DIRETA para atuar pela saída.');return;}
+ const before=s.zicDirectMv;s.zicDirectMv=value;
+ recordEvent('mode','ZIC-009: MV direta definida',`Operador ${fmt(before,1)}% → ${fmt(value,1)}%; saída se deslocará lentamente na slide L-3903${s.hs==='A1'?'A2':'A1'}.`);
+ updateControls();render();toast('MV direta solicitada: '+fmt(value,1)+'%. Observe a rampa no simulador.');
+});
+$('zicCompensationDemo').addEventListener('click',()=>{
+ // Demonstração sem alterar PV artificialmente, apenas o SP decidido pelo operador.
+ s.hs='A1';s.path='max';s.zicMode='sp';s.zicSp=52;
+ s.pdicMode='auto';s.picMode='auto';
+ s.pdicPrev=dpMeasured();s.pdicPvFilt=s.pdicPrev;s.picPrev=s.preg;
+ currentOutput();updateControls();render();
+ recordEvent('disturbance','Demonstração SP ZIC 48% → 52%','A2 sob ZIC pode fechar. A1 responde pelo PDIC ao ΔP: efeito indireto.');
+ toast('SP do ZIC = 52% • observe a A2 e a reação posterior da A1.');
+});
+// Os botões de teste forçam a saída REAL do seletor de maior usando as MVs manuais
+// do PDIC e PIC, sem forjar uma fonte de PV independente no ZIC.
+document.querySelectorAll('[data-zic-test]').forEach(b=>b.addEventListener('click',()=>{
+ const wanted=clampPercent(s.zicSp+Number(b.dataset.zicTest));
+ s.pdicMode='manual';s.picMode='manual';s.pdicManual=wanted;s.picManual=Math.max(0,Math.min(10,wanted));
+ s.pdicMv=wanted;s.picMv=s.picManual;s.pdicPrev=dpMeasured();s.pdicPvFilt=s.pdicPrev;s.picPrev=s.preg;
+ currentOutput();updateControls();
+ recordEvent('disturbance','Teste da PV do ZIC via PDY-029A',`PDIC MAN ${fmt(s.pdicMv,1)}%; PIC MAN ${fmt(s.picMv,1)}%; PV = MAX = ${fmt(s.zicPv,1)}%; SP ${fmt(s.zicSp,1)}%; |Δ| ${fmt(Math.abs(s.zicError),1)} p.p.`);
+ render();toast('PDIC e PIC em MAN didático: PV do ZIC vem do PDY-029A. Avance +1 s para observar a MV.');
+}));
 ['jamA1','jamA2','slow'].forEach(k=>$(k).addEventListener('change',e=>{s[k]=e.target.checked;}));$('speed').addEventListener('change',e=>{s.speed=Number(e.target.value)});
 function recordEvent(type,title,detail=''){
  const item={t:s.t,type,title,detail};s.events.push(item);if(s.events.length>28)s.events.shift();
@@ -69,13 +164,50 @@ function checkAlarmTimers(dt){
 }
 function trackingStable(){return Math.abs((s.preg-s.psep)-s.dpSp)<=.025 && Math.abs(dpMeasured()-s.dpSp)<=.025 &&
  Math.abs(s.targetA1-s.a1)<=5 && Math.abs(s.targetA2-s.a2)<=5 && s.winner==='PDIC' && s.path==='max' && s.pdicMode==='auto' && !s.jamA1 && !s.jamA2;}
-function currentOutput(){s.max=Math.max(s.pdicMv,s.picMv);s.winner=selectedMode();s.base=s.path==='zic'?s.zicMv:s.max;if(s.path==='individual'){s.targetA1=s.manualA1;s.targetA2=s.manualA2;}else if(s.path==='zic'){s.targetA1=clampPercent(s.base-2);s.targetA2=clampPercent(s.base);}else{s.targetA1=clampPercent(s.base+(s.hs==='A1'?s.biasA1:s.biasA2));s.targetA2=clampPercent(s.base+(s.hs==='A1'?s.biasA2:s.biasA1));}}
+function currentOutput(){
+ s.max=Math.max(s.pdicMv,s.picMv);s.winner=selectedMode();s.base=s.max;
+ // CONFIRMADO PELO OPERADOR: a PV do ZIC-009 é a saída percentual do PDY-029A
+ // (seleção de maior dos comandos PDIC-029 e PIC-028), independente da HS.
+ // Não corresponde à realimentação de posição da L-3903 selecionada.
+ s.zicPv=s.max;
+ s.zicError=s.zicPv-s.zicSp;
+ // Limiar de ENTRADA de 3 p.p. informado pelo operador.
+ // A pequena histerese de SAÍDA é somente didática: reduz chaveamento perto de 3.
+ const absZicError=Math.abs(s.zicError);
+ s.zicActive=s.zicMode==='sp' && (s.zicActive ? absZicError>2.6 : absZicError>=3-1e-9);
+ if(s.path==='individual'){
+  s.targetA1=clampPercent(s.manualA1);s.targetA2=clampPercent(s.manualA2);
+  s.sourceA1='MANUAL individual';s.sourceA2='MANUAL individual';return;
+ }
+ // A banda morta é do ZIC-009 (|PV-SP| >= 3 p.p.), NÃO da dinâmica dos atuadores.
+ // Se não atingir o limiar, a slide NÃO selecionada preserva sua última referência.
+ // Se atingir, recebe o sinal MV independente do ZIC-009. Ao retornar para dentro
+ // da banda, a última referência permanece até novo evento de atuação.
+ if(s.hs==='A1'){
+   s.targetA1=clampPercent(s.max);
+   if(s.zicMode==='mv'||s.zicActive)s.zicHeldA2=clampPercent(s.zicMv);
+   s.targetA2=clampPercent(s.zicHeldA2);
+   s.sourceA1=s.winner==='PDIC'?'PDIC-029 via PDY-029A / HS':'PIC-028 override via PDY-029A / HS';
+   s.sourceA2=s.zicMode==='mv'?'ZIC-009 · MV DIRETA':s.zicActive?'ZIC-009 · AUTO SP ativo':'ZIC-009 · banda morta / retendo';
+ }else{
+   s.targetA2=clampPercent(s.max);
+   if(s.zicMode==='mv'||s.zicActive)s.zicHeldA1=clampPercent(s.zicMv);
+   s.targetA1=clampPercent(s.zicHeldA1);
+   s.sourceA1=s.zicMode==='mv'?'ZIC-009 · MV DIRETA':s.zicActive?'ZIC-009 · AUTO SP ativo':'ZIC-009 · banda morta / retendo';
+   s.sourceA2=s.winner==='PDIC'?'PDIC-029 via PDY-029A / HS':'PIC-028 override via PDY-029A / HS';
+ }
+}
 function advance(dt){dt=Math.min(dt,.15);if(s.pdicMode==='auto'){
-  const pv=dpMeasured(),err=pv-s.dpSp;
-  // PI incremental (aproximação), ação direta: maior ΔP -> maior abertura.
-  const raw=70*(pv-s.pdicPrev)+.95*err*dt;
-  s.pdicMv=clampPercent(s.pdicMv+raw);s.pdicPrev=pv;
- }else{s.pdicMv=s.pdicManual;s.pdicPrev=dpMeasured();}
+  const sensed=dpMeasured();
+  // Filtragem, ação direta e limitação de velocidade: valores apenas didáticos.
+  s.pdicPvFilt+=(sensed-s.pdicPvFilt)*Math.min(1,dt/5);
+  const pv=s.pdicPvFilt,err=pv-s.dpSp;
+  const raw=90*(pv-s.pdicPrev)+.72*err*dt;
+  const desired=clampPercent(s.pdicMv+raw);
+  const maxStep=.14*dt; // p.p./s: movimento de comando suavizado
+  s.pdicMv=clampPercent(s.pdicMv+clamp(desired-s.pdicMv,-maxStep,maxStep));
+  s.pdicPrev=pv;
+ }else{s.pdicMv=s.pdicManual;s.pdicPrev=dpMeasured();s.pdicPvFilt=s.pdicPrev;}
  if(s.picMode==='auto'){
   const pv=s.preg,err=pv-s.pregSp;
   // Pré-ativação apenas ilustrativa para materializar override em pressão alta.
@@ -85,9 +217,31 @@ function advance(dt){dt=Math.min(dt,.15);if(s.pdicMode==='auto'){
   }s.picPrev=pv;
  }else{s.picMv=s.picManual;s.picPrev=s.preg;}
  currentOutput();
+ // Dinâmica didática do ZIC (NÃO calibrada): fora da banda de ±3 p.p.
+ // PV do PDY acima do SP -> abre gradualmente a slide auxiliar;
+ // PV do PDY abaixo do SP -> fecha gradualmente a slide auxiliar.
+ // O controle real da MV/ganhos e o seguimento interno do PDY-029B não foram fornecidos.
+ if(s.path!=='individual' && s.zicMode==='sp' && s.zicActive){
+  const outside=Math.max(0,Math.abs(s.zicError)-3);
+  const rate=Math.min(.07,.025+.012*outside); // p.p./s, rampa suave DIDÁTICA
+  s.zicMv=clampPercent(s.zicMv+Math.sign(s.zicError)*rate*dt);
+  currentOutput();
+ }else if(s.path!=='individual' && s.zicMode==='mv'){
+  // MV direta do operador: sem comparação SP/PV no cálculo da correção.
+  // A saída segue a referência pela rampa didática, preservando a suavidade da V2.5.
+  const maxStep=.07*dt; // p.p./s ilustrativos; NÃO representa o SDCD.
+  s.zicMv=clampPercent(s.zicMv+clamp(s.zicDirectMv-s.zicMv,-maxStep,maxStep));
+  currentOutput();
+ }
+ if(s.zicMode==='sp' && s.zicActive!==s.zicWasActive && s.path!=='individual'){recordEvent(s.zicActive?'switch':'clear',s.zicActive?'ZIC-009: dead band de 3 p.p. atingida — comando liberado':'ZIC-009: dentro da dead band — referência retida',`PV ${fmt(s.zicPv,1)}% · SP ${fmt(s.zicSp,1)}% · |Δ| ${fmt(Math.abs(s.zicError),1)} p.p. · slide L-3903${s.hs==='A1'?'A2':'A1'}`);s.zicWasActive=s.zicActive;}
  if(s.winner!==s.lastWinner){recordEvent('switch',`PDY-029A passou a selecionar ${s.winner}`,`PDIC ${fmt(s.pdicMv,1)}% | PIC ${fmt(s.picMv,1)}%`);s.lastWinner=s.winner;}
- const tau=s.slow?48:9;
- const approach=(old,target,jam)=>{if(jam||Math.abs(target-old)<=s.deadBand)return old;return clampPercent(old+(target-old)*Math.min(1,dt/tau));};
+ const tau=s.slow?65:24;
+ const approach=(old,target,jam)=>{
+  if(jam)return old;
+  const desiredStep=(target-old)*Math.min(1,dt/tau);
+  const maxStep=(s.slow?.035:.11)*dt; // p.p./s, hipótese didática de tempo de curso
+  return clampPercent(old+clamp(desiredStep,-maxStep,maxStep));
+ };
  s.a1=approach(s.a1,s.targetA1,s.jamA1);s.a2=approach(s.a2,s.targetA2,s.jamA2);
  checkAlarmTimers(dt);
  s.psep+=(s.psepTarget-s.psep)*Math.min(1,dt/10);
@@ -100,23 +254,69 @@ function advance(dt){dt=Math.min(dt,.15);if(s.pdicMode==='auto'){
  s.t+=dt;s.sampleClock+=dt;
  if(s.sampleClock>=.9){s.sampleClock=0;takeSample();}
 }
-function takeSample(){const h=s.history;h.push({t:s.t,preg:s.preg,psep:s.psep,dp:dpMeasured(),dpTrue:s.preg-s.psep,dpSp:s.dpSp,pdic:s.pdicMv,pic:s.picMv,a1:s.a1,a2:s.a2,cmd1:s.targetA1,cmd2:s.targetA2,max:s.max,selected:s.winner,path:s.path,pdicMode:s.pdicMode,flow:s.flow});if(h.length>330)h.shift();}
+function takeSample(){const h=s.history;h.push({t:s.t,preg:s.preg,psep:s.psep,dp:dpMeasured(),dpTrue:s.preg-s.psep,dpSp:s.dpSp,pdic:s.pdicMv,pic:s.picMv,a1:s.a1,a2:s.a2,cmd1:s.targetA1,cmd2:s.targetA2,max:s.max,selected:s.winner,path:s.path,hs:s.hs,sourceA1:s.sourceA1,sourceA2:s.sourceA2,zicPv:s.zicPv,zicSp:s.zicSp,zicError:s.zicError,zicActive:s.zicActive,zicMode:s.zicMode,zicDirectMv:s.zicDirectMv,zicMv:s.zicMv,pdicMode:s.pdicMode,flow:s.flow});if(h.length>330)h.shift();}
 function setPct(id,n){$(id).textContent=fmt(n,1)+'%'}
+/* V2.7 — clear roles and actual movement on the animated slides. */
+function renderValveRouting(){
+  const main=s.hs==='A1'?1:2,aux=main===1?2:1;
+  const isManual=s.path==='individual';
+  const zicDirect=s.zicMode==='mv';
+  const zicCorrection=!isManual && (zicDirect||s.zicActive);
+  const mainSource=s.winner==='PIC'?'PIC-028 (OVERRIDE)':'PDIC-029';
+  const auxState=zicDirect?'MV DIRETA':s.zicActive?'AUTO SP · ATUANDO':'AUTO SP · BANDA MORTA';
+  $('routeMainName').textContent=isManual?'L-3903A1/A2 — MAN individual':`L-3903${s.hs} — comando principal`;
+  $('routeMainText').textContent=isManual?'Comando manual independente':`${mainSource} → PDY-029A → HS-39014`;
+  $('routeAuxName').textContent=isManual?'Controle automático desabilitado':`L-3903A${aux} — slide auxiliar`;
+  $('routeAuxText').textContent=isManual?'As duas slides seguem referências individuais':`ZIC-009 · ${auxState}`;
+  $('routeCardMain').className='controller-route-card '+(isManual?'route-manual':'route-primary');
+  $('routeCardAux').className='controller-route-card '+(isManual?'route-manual':zicCorrection?'route-active':'route-idle');
+  $('routeExplanation').textContent=isManual?'Modo manual individual: nenhuma slide segue o comando automático via HS.':
+    `HS-39014 → L-3903${s.hs} recebe ${mainSource} via PDY-029A. `+
+    `L-3903A${aux} está sob ZIC-009: `+(zicDirect?'MV solicitada diretamente pelo operador.':s.zicActive?'correção AUTO/SP liberada pela banda morta de 3 p.p.':'dentro da banda morta de 3 p.p., última MV retida.');
+  for(let i=1;i<=2;i++){
+    const mainValve=i===main;
+    const group=$('svgValveGroup'+i),card=$('valveCard'+i);
+    const role=isManual?'is-manual':mainValve?'is-route-primary':zicCorrection?'is-zic-active':'is-zic-idle';
+    group.classList.remove('is-manual','is-route-primary','is-zic-active','is-zic-idle');group.classList.add(role);
+    card.classList.remove('is-route-primary','is-zic-active','is-zic-idle');if(!isManual)card.classList.add(role);
+    const jam=s['jamA'+i];
+    const difference=s['targetA'+i]-s['a'+i];
+    const motion=jam?'TRAVADA':difference>0.28?'ABRINDO ↑':difference<-.28?'FECHANDO ↓':'ESTÁVEL';
+    const label=$('svgMotion'+i);
+    label.textContent=motion;
+    label.className.baseVal='valve-direction '+(jam?'is-stuck':difference>0.28?'is-opening':difference<-.28?'is-closing':'');
+    if(mainValve)$('routeMainMotion').textContent=motion;
+    else $('routeAuxMotion').textContent=!zicCorrection&&!isManual?'RETENDO · '+motion:motion;
+  }
+}
 function render(){const dp=dpMeasured();$('vPreg').textContent=fmt(s.preg,3);$('vPsep').textContent=fmt(s.psep,3);$('vDp').textContent=fmt(dp,3);$('vWinner').textContent=s.winner;$('vSelect').textContent=fmt(s.max,1)+'%';$('dpCompare').textContent=`SP ${fmt(s.dpSp,2)} · erro ${fmt(dp-s.dpSp,3)}`;
- $('pregTrend').textContent=s.picMv>s.pdicMv?'PIC priorizado no seletor':'PDIC disponível para controle';
+ $('pregTrend').textContent=s.picMv>s.pdicMv?'PIC priorizado no seletor':'PDIC disponível • HS em '+s.hs;
  $('refPt').textContent=fmt(s.preg,3);$('sensedPt').textContent=fmt(s.preg+s.sensorBias,3);
  $('dpPhysical').textContent=`${fmt(s.preg-s.psep,3)} / ${fmt(dp,3)}`;
  const bias=Math.abs(s.sensorBias);$('sensorDelta').textContent=bias>.025?`ATENÇÃO: diferença de ${fmt(s.sensorBias,3)} na medição PT-029B`:'Instrumentos coerentes na tolerância didática (±0,025)';
  $('sensorDelta').className=bias>.025?'sensor-warning':'';
  const err=dp-s.dpSp;
- $('coachText').textContent=bias>.025?'DIAGNÓSTICO: PT-029B e PT-028 divergem. Antes de confiar na reação do PDIC, confronte as indicações e as tendências.':s.alarmActiveA1||s.alarmActiveA2?'DIAGNÓSTICO: desvio persistente de posição; investigar comando, ZI e capacidade física de descarga.':s.jamA1||s.jamA2?'DIAGNÓSTICO: falha de atuação simulada. Verifique se a posição real reage ao comando.':s.path!=='max'?'DIAGNÓSTICO: referência desviada do seletor PDY-029A no modelo. As MVs dos controladores não estão governando diretamente as duas slides.':s.pdicMode!=='auto'?'DIAGNÓSTICO: PDIC em MANUAL. A correção automática do ΔP não está ativa neste modelo.':s.winner==='PIC'?'DIAGNÓSTICO: override de pressão prevalece; compare P(D-3904) com SP do PIC e acompanhe a resposta de abertura.':err<-.025?'DIAGNÓSTICO: ΔP abaixo do SP. Com PIC não dominante, o PDIC tende a restringir a descarga para recuperar pressão.':err>.025?'DIAGNÓSTICO: ΔP acima do SP. Espere maior demanda de abertura pelo PDIC, se a malha estiver em AUTO.':'Malha próxima à referência: confira estabilidade temporal e acompanhamento individual das slides.';
+ $('coachText').textContent=bias>.025?'DIAGNÓSTICO: PT-029B e PT-028 divergem. Antes de confiar na reação do PDIC, confronte as indicações e as tendências.':s.alarmActiveA1||s.alarmActiveA2?'DIAGNÓSTICO: desvio persistente de posição; investigar comando, ZI e capacidade física de descarga.':s.jamA1||s.jamA2?'DIAGNÓSTICO: falha de atuação simulada. Verifique se a posição real reage ao comando.':s.path!=='max'?'DIAGNÓSTICO: válvulas em MAN individual, não seguem o sinal selecionado pelo PDY-029A.':s.pdicMode!=='auto'?'DIAGNÓSTICO: PDIC em MANUAL. A correção automática do ΔP não está ativa neste modelo.':s.zicMode==='mv'&&s.path==='max'?'DIAGNÓSTICO: ZIC-009 em MV DIRETA. A slide auxiliar segue o valor da MV digitada; a banda morta e o SP não corrigem automaticamente. Avalie o efeito sobre o diferencial.':s.winner==='PIC'?'DIAGNÓSTICO: override de pressão prevalece; compare P(D-3904) com SP do PIC e acompanhe a resposta de abertura.':err<-.025?'DIAGNÓSTICO: ΔP abaixo do SP. Com PIC não dominante, o PDIC tende a restringir a descarga para recuperar pressão.':err>.025?'DIAGNÓSTICO: ΔP acima do SP. Espere maior demanda de abertura pelo PDIC, se a malha estiver em AUTO.':'Malha próxima à referência: confira estabilidade temporal e acompanhamento individual das slides.';
  $('stableClock').textContent=`${fmt(s.stableSeconds,1)} / 20 s`;
  $('stabilityProgress').style.width=`${clamp(s.stableSeconds/20*100,0,100)}%`;
  $('vTime').textContent=fmt(s.t,1);$('simState').textContent=s.paused?'PAUSADO':'RODANDO';$('simState').classList.toggle('paused',s.paused);
- setPct('sPdic',s.pdicMv);setPct('sPic',s.picMv);setPct('sMax',s.max);setPct('sBase',s.base);$('sPdicMode').textContent=s.pdicMode==='auto'?'AUTO':'MANUAL';$('sPicMode').textContent=s.picMode==='auto'?'AUTO':'MANUAL';$('sMaxFrom').textContent='Vence: '+s.winner;$('sPath').textContent=s.path==='zic'?'Via ZIC-009':s.path==='individual'?'Comandos manuais':'Via PDY-029A';
+ setPct('sPdic',s.pdicMv);setPct('sPic',s.picMv);setPct('sMax',s.max);setPct('sBase',s.base);$('sPdicMode').textContent=s.pdicMode==='auto'?'AUTO':'MANUAL';$('sPicMode').textContent=s.picMode==='auto'?'AUTO':'MANUAL';$('sMaxFrom').textContent='Vence: '+s.winner;$('sPath').textContent=s.path==='individual'?'Ambas em MAN':'HS → L-3903'+s.hs;
+ $('a1Source').textContent=s.sourceA1;$('a2Source').textContent=s.sourceA2;
+ $('zicPvLive').textContent=fmt(s.zicPv,1)+'%';$('zicSpLive').textContent=fmt(s.zicSp,1)+'%';$('zicDeltaLive').textContent=fmt(Math.abs(s.zicError),1)+' p.p.';$('zicMvLive').textContent=fmt(s.zicMv,1)+'%';$('zicPvOrigin').textContent='PDY-029A = maior MV ('+s.winner+')';
+ $('zicFpPv').textContent=fmt(s.zicPv,1)+'%';$('zicFpSp').textContent=fmt(s.zicSp,1)+'%';$('zicFpMv').textContent=fmt(s.zicMv,1)+'%';
+ $('zicMvRequested').textContent=fmt(s.zicDirectMv,1)+'%';$('zicMvSent').textContent=fmt(s.zicMv,1)+'%';$('zicMvProgress').style.width=clampPercent(s.zicMv)+'%';
+ const directZic=s.zicMode==='mv' && s.path!=='individual';
+ $('zicCorrectionLive').textContent=s.path==='individual'?'MAN individual (ZIC fora da rota)':directZic?'MV DIRETA: saída acompanha lentamente '+fmt(s.zicDirectMv,1)+'% (SP não atua)':!s.zicActive?'AUTO SP: MV retida na banda morta':s.zicError>0?'AUTO SP: PV acima do SP → abertura auxiliar (hipótese)':'AUTO SP: PV abaixo do SP → fechamento auxiliar (hipótese)';
+ $('zicActLive').textContent=s.path==='individual'?'FORA DE SERVIÇO (MAN)':directZic?'MV DIRETA — COMANDO PELO OPERADOR':s.zicActive?'AUTO SP — CORRIGINDO SLIDE AUXILIAR':'AUTO SP — EM BANDA MORTA';
+ $('zicActLive').className='zic-state '+((s.zicActive||directZic)&&s.path!=='individual'?'zic-active':'zic-standby');
+ $('balanceLive').textContent=s.path==='individual'?'Modo manual individual: compensação automática suspensa.':s.hs==='A1'?`HS A1: principal ${fmt(s.a1,1)}%; auxiliar A2 ${fmt(s.a2,1)}% • ${s.zicMode==='mv'?'MV direta':s.zicActive?'ZIC corrigindo':'ZIC na banda'}.`:`HS A2: principal ${fmt(s.a2,1)}%; auxiliar A1 ${fmt(s.a1,1)}% • ${s.zicMode==='mv'?'MV direta':s.zicActive?'ZIC corrigindo':'ZIC na banda'}.`;
+ $('svgSource1').textContent=s.path==='individual'?'MANUAL':s.hs==='A1'?(s.winner==='PIC'?'PIC override':'PDIC via HS'):(s.zicMode==='mv'?'ZIC MV direta':s.zicActive?'ZIC ativo':'ZIC retém');
+ $('svgSource2').textContent=s.path==='individual'?'MANUAL':s.hs==='A2'?(s.winner==='PIC'?'PIC override':'PDIC via HS'):(s.zicMode==='mv'?'ZIC MV direta':s.zicActive?'ZIC ativo':'ZIC retém');
+ $('hsLiveRoute').innerHTML=s.path==='individual'?'<span class="route-chip">MANUAL</span><b>Ambas as slides por comando individual</b><span>Modo de treinamento, fora da seleção HS</span>':`<span class="route-chip">HS-39014: ${s.hs}</span><b>PDY-029A (${s.winner}) → L-3903${s.hs}</b><span>L-3903${s.hs==='A1'?'A2':'A1'}: ${s.hs==='A1'?s.sourceA2:s.sourceA1}</span>`;
  for(const [bar,v] of [['barPdic',s.pdicMv],['barPic',s.picMv],['barMax',s.max],['barBase',s.base]])$(bar).style.width=clampPercent(v)+'%';
  const errors=[Math.abs(s.targetA1-s.a1),Math.abs(s.targetA2-s.a2)];
  for(let i=1;i<=2;i++){const actual=s['a'+i], target=s['targetA'+i],er=errors[i-1],jam=s['jamA'+i];setPct('a'+i+'Actual',actual);setPct('a'+i+'Target',target);$('a'+i+'Error').textContent=fmt(er,1)+' p.p.';$('a'+i+'Track').style.width=actual+'%';const el=$('a'+i+'Health');const bad=s['alarmActiveA'+i],pending=er>5;el.textContent=bad?'ALARME DE DESVIO':jam?'TRAVADA':pending?'DESVIO · PENDENTE':er>2?'EM MOVIMENTO':'ACOMPANHANDO';el.className=bad?'status-bad':jam||pending?'status-warn':'status-good';$('alarmT'+i).textContent=fmt(s['alarmTimerA'+i],1)+' s';}
+ renderValveRouting();
  $('svgPreg').textContent=fmt(s.preg,2);$('svgPsep').textContent=fmt(s.psep,2);$('svgDP').textContent='ΔP '+fmt(dp,2);$('svgValve1').textContent=fmt(s.a1,1)+'%';$('svgValve2').textContent=fmt(s.a2,1)+'%';$('aperture1').setAttribute('width',(55*s.a1/100).toFixed(1));$('aperture2').setAttribute('width',(55*s.a2/100).toFixed(1));$('vFlow').textContent='Vazão relativa: '+fmt(s.flow,1)+' u.a.';
  let severity='normal',msg='As posições estão acompanhando os comandos. Observe as tendências de pressão.';
  if(s.alarmActiveA1||s.alarmActiveA2){severity='bad';msg='Desvio de posição persistente após a temporização configurada (critério didático). Compare comando, ZI e descarga.';}else if(errors.some(v=>v>5)){severity='warn';msg='Desvio de posição > 5 p.p. em observação; a temporização hipotética ainda não foi satisfeita.';}
@@ -131,11 +331,11 @@ $('stepSim').addEventListener('click',()=>{s.paused=true;$('pauseSim').textConte
 $('clearEvents').addEventListener('click',()=>{s.events=[];renderEvents();toast('Eventos simulados limpos.');});
 $('pauseSim').addEventListener('click',()=>{s.paused=!s.paused;$('pauseSim').textContent=s.paused?'▶ Continuar':'Ⅱ Pausar';render()});
 $('clearTrend').addEventListener('click',()=>{s.history=[];takeSample();renderCharts();toast('Histórico de tendência limpo.')});
-const presets={loadUp:{load:67},loadDown:{load:34},sepUp:{psepTarget:2.52},sepDown:{psepTarget:1.93},backUp:{back:1.75},picOverride:{load:82,pregSp:2.52},jam1:{jamA1:true,load:64},bias:{sensorBias:-.16},normal:{load:49.1,psepTarget:2.2,back:1.2,pregSp:2.75,dpSp:.30,jamA1:false,jamA2:false,slow:false,sensorBias:0}};
+const presets={loadUp:{load:67},loadDown:{load:34},sepUp:{psepTarget:2.52},sepDown:{psepTarget:1.93},backUp:{back:1.75},picOverride:{load:82,pregSp:2.52},jam1:{jamA1:true,load:64},bias:{sensorBias:-.16},normal:{load:49.1,psepTarget:2.2,back:1.2,pregSp:2.75,dpSp:.30,zicSp:48,jamA1:false,jamA2:false,slow:false,sensorBias:0}};
 function preset(name){const values=presets[name];if(!values)return;Object.assign(s,values);updateControls();recordEvent('disturbance','Perturbação: '+name,'Mudanças didáticas nos valores de entrada; confira quem comanda e a posição real.');toast('Perturbação aplicada: observe a correção da malha e as tendências.');}
 document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>preset(b.dataset.preset)));
-$('exportCsv').addEventListener('click',()=>{const cols=['t','preg','psep','dp','dpSp','pdic','pic','max','a1','a2','cmd1','cmd2','flow'];const content='sep=;\n'+cols.join(';')+'\n'+s.history.map(item=>cols.map(c=>typeof item[c]==='number'?item[c].toFixed(4).replace('.',','):(item[c]??'')).join(';')).join('\n');const blob=new Blob(['\ufeff',content],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='L-3903A1A2-tendencias-simuladas.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Tendência didática exportada em CSV.');});
-$('checkStability').addEventListener('click',()=>{const recent=s.history.filter(p=>p.t>=s.t-20),box=$('challengeResult');let pass=false;const enough=recent.length>=17&&s.t>=20;if(enough)pass=recent.every(p=>Math.abs(p.dp-p.dpSp)<=.025&&Math.abs(p.dpTrue-p.dpSp)<=.025&&Math.abs(p.cmd1-p.a1)<=5&&Math.abs(p.cmd2-p.a2)<=5&&p.selected==='PDIC'&&p.path==='max'&&p.pdicMode==='auto');box.className='challenge-feedback '+(pass?'pass':'fail');box.textContent=pass?'Objetivo didático atingido: diferencial próximo ao SP por 20 s, slides acompanhando e sem domínio contínuo do PIC.':!enough?'Histórico insuficiente: mantenha a simulação funcionando por pelo menos 20 s simulados.':'Ainda há instabilidade no intervalo recente: confira ΔP × SP, comando versus posição e qual controlador prevalece.';});
+$('exportCsv').addEventListener('click',()=>{const cols=['t','preg','psep','dp','dpSp','pdic','pic','max','a1','a2','cmd1','cmd2','hs','sourceA1','sourceA2','zicPv','zicSp','zicError','zicActive','zicMode','zicDirectMv','zicMv','flow'];const content='sep=;\n'+cols.join(';')+'\n'+s.history.map(item=>cols.map(c=>typeof item[c]==='number'?item[c].toFixed(4).replace('.',','):(item[c]??'')).join(';')).join('\n');const blob=new Blob(['\ufeff',content],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='L-3903A1A2-tendencias-simuladas.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Tendência didática exportada em CSV.');});
+$('checkStability').addEventListener('click',()=>{const recent=s.history.filter(p=>p.t>=s.t-20),box=$('challengeResult');let pass=false;const enough=recent.length>=17&&s.t>=20;if(enough)pass=recent.every(p=>Math.abs(p.dp-p.dpSp)<=.025&&Math.abs(p.dpTrue-p.dpSp)<=.025&&Math.abs(p.cmd1-p.a1)<=5&&Math.abs(p.cmd2-p.a2)<=5&&p.selected==='PDIC'&&p.path==='max'&&p.pdicMode==='auto');box.className='challenge-feedback '+(pass?'pass':'fail');box.textContent=pass?'Objetivo didático atingido: diferencial próximo ao SP por 20 s; slide selecionada pela HS acompanha PDIC e outra permanece sob ZIC-009 com limiar de 3 p.p.':!enough?'Histórico insuficiente: mantenha a simulação funcionando por pelo menos 20 s simulados.':'Ainda há instabilidade no intervalo recente: confira ΔP × SP, comando versus posição e qual controlador prevalece.';});
 // Roteiro guiado: critérios didáticos baseados nos sinais simulados e nos eventos de cada missão.
 const missions={
  recovery:{title:'Recuperar o ΔP e estabilizar',goal:'Mantenha ΔP físico e medido próximo do SP (±0,025), as duas slides acompanhando e o PDIC selecionado durante 20 s simulados.',preset:'normal'},
@@ -207,10 +407,10 @@ const QUESTIONS=[
  {tag:'Instrumentação',q:'O PT-029B fornece valor incompatível com o PT-028, ambos associados ao regenerador. Qual ação de diagnóstico é mais fundamentada?',a:['Verificar medições, escalas, históricos e consistência antes de alterar SP.','Ajustar o SP diferencial até que os dois transmissores coincidam.','Manter apenas a posição real das slides como medida de pressão.','Assumir que o PT-028 está errado por ser controle secundário.'],why:'Confrontar instrumentos independentes e históricos ajuda a separar perturbação real de desvio de medição.'},
  {tag:'Fluidos',q:'Mantida a pressão do regenerador e as aberturas, a contrapressão da descarga sobe. O que tende a ocorrer?',a:['A capacidade de escoamento das slides tende a diminuir.','A capacidade de escoamento aumenta devido ao maior bloqueio.','A vazão permanece idêntica independentemente das pressões.','O diferencial entre D-3904 e D-3902 deixa de existir.'],why:'Menor diferencial disponível através das slides tende a reduzir a vazão, mantidas outras condições.'},
  {tag:'Distribuição A1/A2',q:'As duas slides indicam posições reais de 47,9% e 50,3%. Que inferência é tecnicamente sustentável?',a:['Há pequena diferença de posição, sem prova de falha nem de vazão idêntica.','A válvula A2 transporta exatamente 2,4% mais vazão, porque sua abertura é maior.','A válvula A1 está travada porque sua posição é menor que 50%.','O seletor PDY-029A enviou necessariamente dois comandos iguais.'],why:'O posicionamento diferenciado pode ser normal. Igualdade ou desigualdade de vazão requer características e pressões dos ramais.'},
- {tag:'Banda morta',q:'Uma banda morta excessiva no posicionamento pode gerar qual consequência?',a:['Menor frequência de atuação, porém maior erro residual de posição.','Maior resposta a ruídos e menor tolerância de posicionamento.','Aumento automático da vazão sem alterar a área das slides.','Eliminação da necessidade de realimentação de cada atuador.'],why:'Banda morta diminui reações a pequenas perturbações, mas pode sacrificar precisão se exagerada.'},
+ {tag:'Banda morta ZIC-009',q:'Com SP do ZIC-009 em 48%, qual condição libera novo comando para a slide NÃO selecionada pela HS-39014?',a:['PV = 45%, desvio de 3 pontos percentuais.','PV = 47%, desvio de 1 ponto percentual.','PV = 46%, desvio de 2 pontos percentuais.','PV = 48%, sem desvio entre PV e SP.'],why:'A PV do ZIC é o maior sinal selecionado pelo PDY-029A (PDIC ou PIC). Com SP de 48%, desvio de 3 p.p. libera correção didática para a slide auxiliar.'},
  {tag:'Malha integrada',q:'O diferencial está abaixo do SP, mas a pressão do regenerador exige forte abertura pelo PIC. Como interpretar o conflito?',a:['A seleção de máxima pode priorizar a abertura para controlar a pressão.','O PDIC deve sempre prevalecer porque compara duas pressões independentes do sistema.','O seletor bloqueia os dois sinais até que seus setpoints coincidam.','O PIC necessariamente fecha a slide porque sua PV está elevada.'],why:'O seletor passa a maior MV. A regulação de pressão pode se sobrepor à recuperação imediata do diferencial.'},
  {tag:'Falha de atuação',q:'O comando de A1 aumenta, mas a posição real não varia e P(D-3904) continua crescendo. Qual sequência de observação é mais útil?',a:['Confirmar comando, realimentação, desvio, contrapressão e condição do atuador.','Alterar repetidamente SP para induzir uma nova resposta, sem verificar se a slide obedece.','Inferir que a A2 assumiu controle automático sem consultar a lógica.','Ignorar a pressão porque o controlador apresenta MV dentro de 0–100%.'],why:'Uma ordem de abertura não comprova aumento de descarga. O diagnóstico integra execução, instrumentação e processo.'},
- {tag:'Validação',q:'Qual elemento da tela não pode ser tratado como lógica completamente conhecida sem consultar a configuração?',a:['A distribuição interna PDY-029B/HS-39014 entre as slides.','A seleção de maior indicada explicitamente pelo símbolo ≥.','A subtração entre as pressões do regenerador e separador.','A existência de realimentações individuais de posição.'],why:'Os símbolos e conexões visíveis não estabelecem a tabela de verdade e o roteamento completo de PDY-029B/HS-39014.'},
+ {tag:'PV do ZIC-009',q:'Qual sinal chega à entrada PV do ZIC-009 quando o PDIC solicita 47,6% e o PIC solicita 10%?',a:['O sinal percentual de 47,6% selecionado pelo PDY-029A.','A posição real de 47,9% informada pelo ZI-39968.','A saída de 10% do PIC-028, independentemente do seletor.','O valor de 48% que o operador digitou como SP do ZIC.'],why:'A PV do ZIC-009 vem da saída de maior valor do PDY-029A, neste caso 47,6%. O SP digitado pelo operador é uma entrada distinta. A posição real da slide não é a PV do ZIC.'},
  {tag:'Diagnóstico numérico',q:'A1 tem comando 48% e posição real 47,9%. Como interpretar o desvio em pontos percentuais?',a:['A magnitude é de 0,1 ponto percentual, relativamente pequena.','A magnitude é de 1 ponto percentual, exatamente igual à banda morta.','A magnitude é de 10 pontos percentuais, acima do valor ±5.','A magnitude é nula, pois posição e comando sempre coincidem.'],why:'|48 − 47,9| = 0,1 ponto percentual. Não confundir ponto percentual com porcentagem relativa.'},
  {tag:'Operação CIC',q:'Antes de transferir o controle real da PDV-39027C para as L-3903, qual referência deve prevalecer?',a:['Procedimento controlado vigente, verificações de disponibilidade e coordenação CIC/campo.','Sequência aleatória da simulação, pois ela contém as mesmas válvulas do processo.','Apenas a porcentagem da MV do PDIC, sem avaliar pressão e alinhamento.','A movimentação simultânea máxima das válvulas para abreviar a transferência.'],why:'O procedimento PE.REF.OPE.CCF.063 é a referência para transferências reais, com acompanhamento e coordenação operacional.'}
 ];
