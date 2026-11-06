@@ -1,3 +1,23 @@
+# L-3903A1/A2 Concept — V2.8: correção do espaço vazio no desktop
+
+**Origem da correção:** na V2.7, `.sim-main` e `.sim-controls` eram duas colunas independentes. A coluna esquerda terminava na tendência, mas o faceplate e os controles da direita continuavam por uma altura muito maior, produzindo uma área vazia grande.
+
+**Correção aplicada na V2.8 (somente largura de tela >= 1024 px):**
+
+- O simulador usa uma grade principal de 12 colunas, com animação e indicadores da HS/PDY/ZIC alinhados na primeira faixa.
+- As três tendências passam para uma faixa de largura total, lado a lado, sem longos gráficos empilhados em meia coluna.
+- Distúrbios, setpoints e falhas são colocados em três painéis na mesma faixa.
+- O painel de roteamento HS-39014/ZIC-009 ocupa largura total, dividido internamente em contexto operacional e faceplate didático.
+- Todos os controles e IDs originais foram preservados; o motor da simulação e os valores de ganhos/atuação da V2.7 não foram alterados.
+- Visualização mobile/tablet estreito, swipe horizontal do SVG e faceplate mobile permanecem com a disposição anterior.
+- O cache da PWA foi atualizado para `l3903-concept-v2-8-desktop-grid-20261106`.
+
+## Publicação
+
+Enviar todo o conteúdo extraído deste ZIP para a raiz do repositório. Ao usar apenas atualizações incrementais, substituir `index.html`, `style.css` e `sw.js`; `app.js`, manifesto e assets continuam iguais à V2.7.
+
+---
+
 # L-3903A1/A2 Concept — V2.6 · Faceplate ZIC-009
 
 A V2.6 acrescenta ao faceplate didático do ZIC-009 dois modos de atuação sem alterar a compensação suave da V2.5 nem o controle do diferencial PDIC-029 / PIC-028.
