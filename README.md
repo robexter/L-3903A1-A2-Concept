@@ -1,3 +1,13 @@
+# V2.8.2 — Correção do diferencial de pressão na referência
+
+Valor adotado em toda a Concept: para PT-029B = 2,47 e PT-029A = 2,20, o diferencial correto é ΔP = **0,27**, que fica **0,03 abaixo** do SP = 0,30.
+
+Atualizados: cartões de visão geral, diagrama lógico, explicação integral, tabela de instrumentação, cenário CIC, avaliação técnica e imagem de referência. Nenhum parâmetro da dinâmica das slides, modos HS/ZIC, CSS/layout ou instrumentos simulados foi alterado. O cache PWA foi renovado.
+
+Para atualizar a V2.8 já publicada, substituir `index.html`, `app.js` e `sw.js`; não é necessário substituir `style.css` ou `assets`.
+
+---
+
 # L-3903A1/A2 Concept — V2.8: correção do espaço vazio no desktop
 
 **Origem da correção:** na V2.7, `.sim-main` e `.sim-controls` eram duas colunas independentes. A coluna esquerda terminava na tendência, mas o faceplate e os controles da direita continuavam por uma altura muito maior, produzindo uma área vazia grande.
@@ -67,7 +77,7 @@ O app não precisa de bibliotecas externas, servidor de back-end ou credenciais.
 - Cada posição real segue o alvo com dinâmica de primeira ordem, `dA/dt = (alvo − A)/tau`; `tau = 24 s` na condição padrão e `65 s` no modo lento (além de limite de deslocamento didático de 0,11 p.p./s padrão e 0,035 p.p./s lento). A falha de travamento congela a posição.
 - O PDIC utiliza controle PI incremental ilustrativo de ação direta. O PIC utiliza correção incremental e uma faixa de ativação didática próxima do SP. O PDY-029A escolhe a maior MV.
 - A HS-39014 seleciona qual slide recebe o caminho PDIC-029/PDY-029A, conforme esclarecimento operacional do usuário. O comportamento da slide não selecionada permanece hipotético: ZIC-009, posição retida ou referência MAN.
-- A condição original de fotografia tem P(D-3904) = 2,47 e P(D-3902) = 2,20, que matematicamente dão ΔP = 0,27; a tela original exibe 0,25. O simulador calcula o diferencial consistente com seus próprios valores e não reproduz artificialmente essa divergência.
+- Toda a Concept passa a apresentar diretamente ΔP = 0,27 (2,47 − 2,20) como valor de referência dessa condição.
 - SPs, bandas de desvio e parâmetros do laboratório não são limites de segurança nem instruções para a operação da planta.
 
 ## Documentação de referência
